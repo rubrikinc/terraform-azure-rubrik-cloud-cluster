@@ -1,6 +1,8 @@
 variable "azurerm_resource_group"   {}
 variable "azurerm_location"         {}
 variable "azurerm_rubrik_vhd_uri"   {}
+variable "storage_acct_name"        {}
+variable "storage_container"        {}
 variable "azure_vm_size"            { default = "Standard_DS3_v2"}
 variable "cluster_name"             { default = "rubrik-test-cluster" }
 variable "cluster_size"             { default = 4 }

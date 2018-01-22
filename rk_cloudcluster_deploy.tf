@@ -27,48 +27,6 @@ resource "azurerm_network_interface" "cluster_interfaces" {
   }
 }
 
-# Create managed disk for our OS disk from the VHD in our blob store
-resource "azurerm_managed_disk" "os_disk" {
-  count                 = "${var.cluster_size}"
-  name                  = "${var.cluster_name}${count.index + 1}_os_0"
-  location              = "${var.azurerm_location}"
-  resource_group_name   = "${var.azurerm_resource_group}"
-  storage_account_type  = "Standard_LRS"
-  create_option         = "Import"
-  os_type               = "Linux"
-  source_uri            = "${var.azurerm_rubrik_vhd_uri}"
-  disk_size_gb          = "400"
-}
-
-# Create our 3 x managed disks per node for data
-resource "azurerm_managed_disk" "data_disk_1" {
-  count                 = "${var.cluster_size}"
-  name                  = "${var.cluster_name}${count.index + 1}_data_1"
-  location              = "${var.azurerm_location}"
-  resource_group_name   = "${var.azurerm_resource_group}"
-  storage_account_type  = "Standard_LRS"
-  create_option         = "Empty"
-  disk_size_gb          = "1024"
-}
-resource "azurerm_managed_disk" "data_disk_2" {
-  count                 = "${var.cluster_size}"
-  name                  = "${var.cluster_name}${count.index + 1}_data_2"
-  location              = "${var.azurerm_location}"
-  resource_group_name   = "${var.azurerm_resource_group}"
-  storage_account_type  = "Standard_LRS"
-  create_option         = "Empty"
-  disk_size_gb          = "1024"
-}
-resource "azurerm_managed_disk" "data_disk_3" {
-  count                 = "${var.cluster_size}"
-  name                  = "${var.cluster_name}${count.index + 1}_data_3"
-  location              = "${var.azurerm_location}"
-  resource_group_name   = "${var.azurerm_resource_group}"
-  storage_account_type  = "Standard_LRS"
-  create_option         = "Empty"
-  disk_size_gb          = "1024"
-}
-
 # Create our production cluster
 resource "azurerm_virtual_machine" "rubrik_cluster" {
   count                   = "${var.cluster_size}"
@@ -76,45 +34,54 @@ resource "azurerm_virtual_machine" "rubrik_cluster" {
   location                = "${var.azurerm_location}"
   resource_group_name     = "${var.azurerm_resource_group}"
   vm_size                 = "${var.azure_vm_size}"
+  # Delete our disks when we terminate the instance
+  delete_os_disk_on_termination     = true
+  delete_data_disks_on_termination  = true
   network_interface_ids   = ["${element(azurerm_network_interface.cluster_interfaces.*.id, count.index)}"]
   os_profile_linux_config { disable_password_authentication = false }
+  os_profile {
+    computer_name  = "${var.cluster_name}${count.index + 1}"
+    admin_username = "ubuntu"
+    admin_password = "N0tAPassw0rd!@"
+  }
   # OS disk
   storage_os_disk {
-    name              = "${element(azurerm_managed_disk.os_disk.*.name, count.index)}"
-    managed_disk_id   = "${element(azurerm_managed_disk.os_disk.*.id, count.index)}"
-    create_option     = "Attach"
+    name              = "${var.cluster_name}${count.index + 1}_os_0.vhd"
+    image_uri         = "${var.azurerm_rubrik_vhd_uri}"
+    vhd_uri           = "https://${var.storage_acct_name}.blob.core.windows.net/${var.storage_container}/${var.cluster_name}${count.index + 1}_os_0.vhd"
+    create_option     = "FromImage"
+    caching           = "ReadWrite"
     disk_size_gb      = "400"
     os_type           = "linux"
   }
   # 3 x capacity disks
   storage_data_disk {
-    name              = "${element(azurerm_managed_disk.data_disk_1.*.name, count.index)}"
-    managed_disk_id   = "${element(azurerm_managed_disk.data_disk_1.*.id, count.index)}"
-    create_option     = "Attach"
+    name              = "${var.cluster_name}${count.index + 1}_data_1.vhd"
+    vhd_uri           = "https://${var.storage_acct_name}.blob.core.windows.net/${var.storage_container}/${var.cluster_name}${count.index + 1}_data_1.vhd"
+    create_option     = "Empty"
+    caching           = "ReadWrite"
     lun               = 0
     disk_size_gb      = "1024"
   }
   storage_data_disk {
-    name              = "${element(azurerm_managed_disk.data_disk_2.*.name, count.index)}"
-    managed_disk_id   = "${element(azurerm_managed_disk.data_disk_2.*.id, count.index)}"
-    create_option     = "Attach"
+    name              = "${var.cluster_name}${count.index + 1}_data_2.vhd"
+    vhd_uri           = "https://${var.storage_acct_name}.blob.core.windows.net/${var.storage_container}/${var.cluster_name}${count.index + 1}_data_2.vhd"
+    create_option     = "Empty"
+    caching           = "ReadWrite"
     lun               = 1
     disk_size_gb      = "1024"
   }
   storage_data_disk {
-    name              = "${element(azurerm_managed_disk.data_disk_3.*.name, count.index)}"
-    managed_disk_id   = "${element(azurerm_managed_disk.data_disk_3.*.id, count.index)}"
-    create_option     = "Attach"
+    name              = "${var.cluster_name}${count.index + 1}_data_3.vhd"
+    vhd_uri           = "https://${var.storage_acct_name}.blob.core.windows.net/${var.storage_container}/${var.cluster_name}${count.index + 1}_data_3.vhd"
+    create_option     = "Empty"
+    caching           = "ReadWrite"
     lun               = 2
     disk_size_gb      = "1024"
   }
   depends_on = [
     "azurerm_public_ip.public_ip",
-    "azurerm_network_interface.cluster_interfaces",
-    "azurerm_managed_disk.os_disk",
-    "azurerm_managed_disk.data_disk_1",
-    "azurerm_managed_disk.data_disk_2",
-    "azurerm_managed_disk.data_disk_3"
+    "azurerm_network_interface.cluster_interfaces"
     ]
 }
 
