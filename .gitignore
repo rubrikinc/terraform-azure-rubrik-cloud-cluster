@@ -5,8 +5,9 @@
 \#*#
 .*.sw[a-z]
 *.un~
+.DS_Store
 
 # Terraform
 terraform.tfvars
 .terraform/*
-terraform.tfstate*
+*.tfstate*
