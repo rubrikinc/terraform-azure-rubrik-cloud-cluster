@@ -9,7 +9,7 @@ resource "azurerm_public_ip" "public_ip" {
   name                          = "${var.cluster_name}${count.index + 1}_public_ip"
   location                      = "${var.azurerm_location}"
   resource_group_name           = "${var.azurerm_resource_group}"
-  public_ip_address_allocation  = "dynamic"
+  public_ip_address_allocation  = "static"
 }
 
 # Build our network interfaces
@@ -108,12 +108,14 @@ resource "azurerm_virtual_machine" "rubrik_cluster" {
     lun               = 2
     disk_size_gb      = "1024"
   }
-}
-/*
-# Determine the gateway and subnet mask for our subnet, using built in functions
-locals {
-  subnet_mask = "${cidrnetmask("${data.aws_subnet.rubrik_cluster_subnet.cidr_block}")}"
-  gateway_ip = "${cidrhost("${data.aws_subnet.rubrik_cluster_subnet.cidr_block}", 1)}"
+  depends_on = [
+    "azurerm_public_ip.public_ip",
+    "azurerm_network_interface.cluster_interfaces",
+    "azurerm_managed_disk.os_disk",
+    "azurerm_managed_disk.data_disk_1",
+    "azurerm_managed_disk.data_disk_2",
+    "azurerm_managed_disk.data_disk_3"
+    ]
 }
 
 # Generate our production host network config
@@ -122,11 +124,12 @@ data "template_file" "host_network" {
   template = <<JSON
 $${join(",",
   list(
-    "$${jsonencode("netmask")}:$${jsonencode("${local.subnet_mask}")}",
-    "$${jsonencode("gateway")}:$${jsonencode("${local.gateway_ip}")}",
+    "$${jsonencode("netmask")}:$${jsonencode("${var.subnet_snm}")}",
+    "$${jsonencode("gateway")}:$${jsonencode("${var.subnet_gateway}")}",
     "$${jsonencode("address")}:$${jsonencode("${element(azurerm_network_interface.cluster_interfaces.*.private_ip_address, count.index)}")}",
   ))}"
 JSON
+  depends_on = ["azurerm_virtual_machine.rubrik_cluster"]
 }
 
 data "template_file" "host_json" {
@@ -148,7 +151,7 @@ data "template_file" "bootstrap_json_normalised" {
 }
 
 locals {
-  bootstrap_ip = "${var.bootstrap_interface == "public" ? aws_instance.rubrik_cluster.0.public_ip : aws_instance.rubrik_cluster.0.private_ip}"
+  bootstrap_ip = "${var.bootstrap_interface == "public" ? azurerm_public_ip.public_ip.0.ip_address : azurerm_network_interface.cluster_interfaces.0.private_ip_address}"
 }
 
 # Call the REST API on our production cluster to build the cluster. We wait 3 minutes for the API to be ready
@@ -157,4 +160,3 @@ resource "null_resource" "bootstrap" {
     command = "sleep 180 && curl -X POST --header 'Content-Type: application/json' --header 'Accept: application/json' -k -d '${data.template_file.bootstrap_json_normalised.rendered}' 'https://${local.bootstrap_ip}/api/internal/cluster/me/bootstrap'"
   }
 }
-*/
