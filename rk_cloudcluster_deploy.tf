@@ -3,18 +3,9 @@ provider "azurerm" {
   version = "~> 0.3"
 }
 
-# Get a public IP for our network interface - remove for prod
-resource "azurerm_public_ip" "public_ip" {
-  count                         = "${var.cluster_size}"
-  name                          = "${var.cluster_name}${count.index + 1}_public_ip"
-  location                      = "${var.azurerm_location}"
-  resource_group_name           = "${var.azurerm_resource_group}"
-  public_ip_address_allocation  = "static"
-}
-
 # Build our network interfaces
 resource "azurerm_network_interface" "cluster_interfaces" {
-  count               = "${var.cluster_size}"
+  count               = "${var.cluster_size * (1 - var.use_public_ips)}"
   name                = "${var.cluster_name}${count.index + 1}"
   location            = "${var.azurerm_location}"
   resource_group_name = "${var.azurerm_resource_group}"
@@ -23,7 +14,6 @@ resource "azurerm_network_interface" "cluster_interfaces" {
     name                          = "${var.cluster_name}${count.index + 1}"
     subnet_id                     = "${var.subnet_id}"
     private_ip_address_allocation = "dynamic"
-    public_ip_address_id          = "${element(azurerm_public_ip.public_ip.*.id, count.index)}"
   }
 }
 
@@ -79,10 +69,7 @@ resource "azurerm_virtual_machine" "rubrik_cluster" {
     lun               = 2
     disk_size_gb      = "1024"
   }
-  depends_on = [
-    "azurerm_public_ip.public_ip",
-    "azurerm_network_interface.cluster_interfaces"
-    ]
+  depends_on = ["azurerm_network_interface.cluster_interfaces"]
 }
 
 # Generate our production host network config
@@ -117,13 +104,9 @@ data "template_file" "bootstrap_json_normalised" {
   template = "${replace("${data.template_file.bootstrap_json.0.rendered}","\"\n","")}"
 }
 
-locals {
-  bootstrap_ip = "${var.bootstrap_interface == "public" ? azurerm_public_ip.public_ip.0.ip_address : azurerm_network_interface.cluster_interfaces.0.private_ip_address}"
-}
-
 # Call the REST API on our production cluster to build the cluster. We wait 3 minutes for the API to be ready
 resource "null_resource" "bootstrap" {
   provisioner "local-exec" {
-    command = "sleep 180 && curl -X POST --header 'Content-Type: application/json' --header 'Accept: application/json' -k -d '${data.template_file.bootstrap_json_normalised.rendered}' 'https://${local.bootstrap_ip}/api/internal/cluster/me/bootstrap'"
+    command = "sleep 180 && curl -X POST --header 'Content-Type: application/json' --header 'Accept: application/json' -k -d '${data.template_file.bootstrap_json_normalised.rendered}' 'https://${azurerm_network_interface.cluster_interfaces.0.private_ip_address}/api/internal/cluster/me/bootstrap'"
   }
 }
