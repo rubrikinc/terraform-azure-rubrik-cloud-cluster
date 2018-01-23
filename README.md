@@ -42,7 +42,7 @@ The below describes the different variables which should be defined in this file
 
 Variable name | Description | Sample Value
 --- | --- | ---
-subnet_id | | "/subscriptions/fbc2ec27-abcd-1234-abcd-1af8b4feac31/resourceGroups/rubrik_resources/providers/Microsoft.Network/virtualNetworks/rubrik_network/subnets/rubrik_subnet"
+subnet_id | The ARM ID for the subnet to contain the Rubrik cluster nodes | "/subscriptions/fbc2ec27-abcd-1234-abcd-1af8b4feac31/resourceGroups/rubrik_resources/providers/Microsoft.Network/virtualNetworks/rubrik_network/subnets/rubrik_subnet"
 storage_acct_name | The storage account to create the disks for the nodes in | "rubrikstorageacct"
 storage_container | The container in above storage account to create the disks for the nodes in | "rubrik-cloudcluster"
 subnet_snm | The subnet mask for the subnet configured in 'subnet_id' | "255.255.255.0"
@@ -57,6 +57,23 @@ admin_email_address | The email address to set for the admin account on the Rubr
 ntp_servers | The NTP server to configure on the Rubrik cluster (can be changed later), suggest that the sample value is used during bootstrap | "pool.ntp.org"
 dns_servers | The DNS server(s) to configure on the Rubrik cluster (can be changed later), suggest that the sample value is used during bootstrap | "8.8.8.8\",\"8.8.4.4"
 
+These variables should be defined and stored in `terraform.tfvars` as demonstrated in the sample file included with the repository.
+
+## Getting the Terraform provider plugins
+
+The command `terraform init` should be run while in the folder containing these files to download the required Terraform provider plugins.
+
+## Testing the configuration
+
+The command `terraform plan` can be run to output to the screen the resources due to be provisioned as a result of running the configuration.
+
+## Applying the configuration
+
+When ready to apply the configuration, simply run `terraform apply`; this will prompt for confirmation and then provision the required resources in Azure.
+
+As the last stage you will see a command starting with `sleep 180 && curl -X...` being fired to the IP address of the cluster. This is the bootstrap via the Rubrik API, and this waits 180 seconds after the VMs are provisioned to ensure they have booted and are ready to receive this configuation.
+
+After the curl command completes, you should see a `{"status":"issued set all confs","id":1}` JSON response. If the status and ID do not match this then the bootstrap was unsuccessful and you should troubleshoot the issue.
 
 ## Checking the status of the cluster bootstrap
 
@@ -87,4 +104,4 @@ This should return a JSON in this format:
 }
 ```
 
-This can be monitored to completion. Once the `status` field is marked as `SUCCESS` the cluster is operational.
+This can be monitored to completion. Once the `status` field is marked as `SUCCESS` the cluster is operational and can be further configured via the web interface.
